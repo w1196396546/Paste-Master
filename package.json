@@ -2,6 +2,11 @@
   "name": "plate",
   "version": "0.1.0",
   "private": true,
+  "description": "一个跨平台的智能剪贴板管理工具",
+  "author": {
+    "name": "whq",
+    "email": "1196396546w@gmail.com"
+  },
   "scripts": {
     "serve": "vue-cli-service serve",
     "build": "vue-cli-service build",
@@ -10,6 +15,14 @@
     "lint": "vue-cli-service lint",
     "postinstall": "electron-builder install-app-deps",
     "postuninstall": "electron-builder install-app-deps"
+  },
+  "build": {
+    "appId": "com.smart.plate",
+    "productName": "Plate",
+    "win": {
+      "target": "nsis",
+      "icon": "public/icons/icon.svg"
+    }
   },
   "main": "background.js",
   "dependencies": {

@@ -28,8 +28,8 @@ module.exports = defineConfig({
         directories: {
           output: 'dist_electron'
         },
+        asar: true,
         win: {
-          icon: 'public/icons/icon.svg',
           target: [
             {
               target: 'nsis',
@@ -37,16 +37,27 @@ module.exports = defineConfig({
             }
           ]
         },
-        mac: {
-          icon: 'public/icons/icon.svg'
-        },
-        linux: {
-          icon: 'public/icons/icon.svg'
+        nsis: {
+          oneClick: false,
+          allowToChangeInstallationDirectory: true,
+          createDesktopShortcut: true,
+          createStartMenuShortcut: true,
+          shortcutName: "Plate"
         },
         files: [
-          "**/*",
-          "src/preload.js",
-          "public/icons/*"
+          "dist_electron/**/*",
+          "node_modules/**/*",
+          "package.json"
+        ],
+        extraResources: [
+          {
+            from: "src/main",
+            to: "app/src/main"
+          },
+          {
+            from: "src/preload.js",
+            to: "app/src/preload.js"
+          }
         ]
       }
     }
