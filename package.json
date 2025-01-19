@@ -16,14 +16,6 @@
     "postinstall": "electron-builder install-app-deps",
     "postuninstall": "electron-builder install-app-deps"
   },
-  "build": {
-    "appId": "com.smart.plate",
-    "productName": "Plate",
-    "win": {
-      "target": "nsis",
-      "icon": "public/icons/icon.svg"
-    }
-  },
   "main": "background.js",
   "dependencies": {
     "@vueuse/core": "^10.7.1",
