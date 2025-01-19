@@ -1,24 +1,104 @@
-# plate
+# Plate - 智能剪贴板管理工具
 
-## Project setup
+## 项目简介
+Plate 是一个跨平台的智能剪贴板管理工具，旨在为用户提供便捷的内容复制、管理和同步功能。它支持多种内容类型的管理，包括文本、图片、代码片段等，并提供云端同步功能，确保用户可以在不同设备间无缝使用。
+
+## 核心功能
+1. 跨平台同步
+   - 支持 Windows、Mac、Android、iOS 等平台
+   - 实时数据同步
+   - 离线使用支持
+
+2. 剪切板历史记录
+   - 多类型内容支持（文本、图片、链接等）
+   - 历史记录时间线
+   - 内容预览功能
+
+3. 内容管理
+   - 分类管理系统
+   - 标签功能
+   - 搜索与过滤
+   - 批量操作
+
+4. 云端同步
+   - 自动同步
+   - 数据备份
+   - 版本历史
+
+5. 安全性
+   - 端到端加密
+   - 访问权限控制
+   - 敏感数据保护
+
+6. 快捷操作
+   - 自定义快捷键
+   - 右键菜单集成
+   - 快速粘贴功能
+
+## 技术架构
+- 前端框架：Vue 3
+- UI 组件：Element Plus
+- 桌面端：Electron
+- 状态管理：Pinia
+- 数据存储：IndexedDB/SQLite
+- 云同步：WebSocket/REST API
+
+## 项目结构
 ```
+plate/
+├── src/                    # 源代码目录
+│   ├── main/              # 主进程代码
+│   ├── renderer/          # 渲染进程代码
+│   ├── components/        # Vue组件
+│   ├── store/             # 状态管理
+│   ├── utils/             # 工具函数
+│   └── assets/            # 静态资源
+├── public/                # 公共资源
+├── dist_electron/         # 构建输出目录
+└── tests/                 # 测试文件
+```
+
+## 开发指南
+1. 环境要求
+   - Node.js >= 14.x
+   - npm >= 6.x
+
+2. 安装依赖
+```bash
 npm install
 ```
 
-### Compiles and hot-reloads for development
-```
-npm run serve
-```
-
-### Compiles and minifies for production
-```
-npm run build
+3. 开发模式
+```bash
+npm run electron:serve
 ```
 
-### Lints and fixes files
-```
-npm run lint
+4. 构建应用
+```bash
+npm run electron:build
 ```
 
-### Customize configuration
-See [Configuration Reference](https://cli.vuejs.org/config/).
+## 开发计划
+### 第一阶段：基础功能实现
+- [ ] 项目架构搭建
+- [ ] 本地剪切板监听
+- [ ] 历史记录管理
+- [ ] 基础UI界面
+
+### 第二阶段：核心功能开发
+- [ ] 云同步功能
+- [ ] 多设备支持
+- [ ] 数据加密
+- [ ] 高级搜索功能
+
+### 第三阶段：功能优化
+- [ ] 性能优化
+- [ ] UI/UX改进
+- [ ] 多语言支持
+- [ ] 插件系统
+
+## 贡献指南
+欢迎提交 Issue 和 Pull Request 来帮助改进项目。
+
+## 许可证
+MIT License
