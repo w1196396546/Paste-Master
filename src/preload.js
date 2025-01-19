@@ -18,7 +18,10 @@ const electronAPI = {
         'clear-clipboard-history',
         'get-clipboard-content',
         'set-clipboard-content',
-        'window-control'
+        'window-control',
+        'get-shortcuts',
+        'update-shortcut',
+        'close-quick-access'
       ]
       if (validChannels.includes(channel)) {
         console.log('[Preload] 发送消息到主进程:', channel)
@@ -35,7 +38,9 @@ const electronAPI = {
         'clipboard-history',
         'clipboard-content',
         'settings-saved',
-        'clipboard-history-saved'
+        'clipboard-history-saved',
+        'shortcuts-loaded',
+        'shortcut-updated'
       ]
       if (validChannels.includes(channel)) {
         console.log('[Preload] 添加事件监听器:', channel)
@@ -61,7 +66,9 @@ const electronAPI = {
         'clipboard-history',
         'clipboard-content',
         'settings-saved',
-        'clipboard-history-saved'
+        'clipboard-history-saved',
+        'shortcuts-loaded',
+        'shortcut-updated'
       ]
       if (validChannels.includes(channel)) {
         console.log('[Preload] 添加一次性事件监听器:', channel)

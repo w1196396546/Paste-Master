@@ -82,7 +82,12 @@
         <el-form-item label="快捷键">
           <el-descriptions :column="1" border>
             <el-descriptions-item label="快速访问">
-              <el-tag>Ctrl + Shift + V</el-tag>
+              <div class="shortcut-setting">
+                <el-tag>{{ shortcuts.quickAccess }}</el-tag>
+                <el-button type="primary" link @click="showHotkeyDialog">
+                  修改快捷键
+                </el-button>
+              </div>
               <div class="setting-description">
                 按下快捷键可快速打开剪贴板历史，选择内容后自动复制并关闭
               </div>
@@ -105,30 +110,25 @@
     <!-- 快捷键设置对话框 -->
     <el-dialog
       v-model="showHotkeysDialog"
-      title="快捷键设置"
+      title="设置快速访问快捷键"
       width="500px"
     >
       <el-form label-width="120px">
-        <el-form-item label="显示主窗口">
+        <el-form-item label="当前快捷键">
           <el-input
-            v-model="hotkeys.showWindow"
-            placeholder="点击输入快捷键"
+            v-model="tempShortcut"
+            placeholder="点击输入新的快捷键"
             readonly
-            @keydown="e => recordHotkey(e, 'showWindow')"
+            @keydown="recordHotkey"
           />
-        </el-form-item>
-        <el-form-item label="快速粘贴">
-          <el-input
-            v-model="hotkeys.quickPaste"
-            placeholder="点击输入快捷键"
-            readonly
-            @keydown="e => recordHotkey(e, 'quickPaste')"
-          />
+          <div class="setting-description">
+            按下组合键设置新的快捷键，按 ESC 取消
+          </div>
         </el-form-item>
       </el-form>
       <template #footer>
         <span class="dialog-footer">
-          <el-button @click="showHotkeysDialog = false">取消</el-button>
+          <el-button @click="cancelHotkeyEdit">取消</el-button>
           <el-button type="primary" @click="saveHotkeys">
             确定
           </el-button>
@@ -163,7 +163,7 @@ export default {
 </script>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { useClipboardStore } from '../../store/clipboard'
 import { ElMessage } from 'element-plus'
 import pkg from '../../../package.json'
@@ -177,16 +177,135 @@ const settings = reactive({
   ...clipboardStore.settings
 })
 
-// 快捷键设置
-const hotkeys = reactive({
-  showWindow: 'Ctrl+Shift+V',
-  quickPaste: 'Ctrl+Shift+Space'
+const shortcuts = ref({
+  quickAccess: ''
+})
+
+// 临时存储编辑中的快捷键
+const tempShortcut = ref('')
+
+// 加载快捷键设置
+async function loadShortcuts() {
+  if (!window.electron) return
+  
+  window.electron.ipcRenderer.send('get-shortcuts')
+  window.electron.ipcRenderer.once('shortcuts-loaded', (loadedShortcuts) => {
+    console.log('Loaded shortcuts:', loadedShortcuts)
+    if (loadedShortcuts) {
+      shortcuts.value = { ...loadedShortcuts }
+      console.log('Updated shortcuts:', shortcuts.value)
+    }
+  })
+}
+
+// 显示快捷键设置对话框
+function showHotkeyDialog() {
+  tempShortcut.value = shortcuts.value.quickAccess || ''
+  showHotkeysDialog.value = true
+}
+
+// 取消快捷键编辑
+function cancelHotkeyEdit() {
+  showHotkeysDialog.value = false
+}
+
+// 记录快捷键
+function recordHotkey(event) {
+  event.preventDefault()
+  
+  // ESC 键取消编辑
+  if (event.key === 'Escape') {
+    tempShortcut.value = shortcuts.value.quickAccess
+    return
+  }
+  
+  // Tab 键忽略
+  if (event.key === 'Tab') return
+
+  const { ctrlKey, shiftKey, altKey, metaKey, key } = event
+  const keys = []
+  
+  if (window.electron?.platform === 'darwin') {
+    if (metaKey) keys.push('Command')
+  } else {
+    if (ctrlKey) keys.push('Control')
+  }
+  if (shiftKey) keys.push('Shift')
+  if (altKey) keys.push('Alt')
+  
+  // 只添加有效的主键
+  if (key.length === 1) {
+    keys.push(key.toUpperCase())
+  } else if (!['Control', 'Shift', 'Alt', 'Meta', 'Escape'].includes(key)) {
+    keys.push(key)
+  }
+
+  // 至少需要一个修饰键和一个主键
+  if (keys.length > 1) {
+    tempShortcut.value = keys.join('+')
+  }
+}
+
+// 保存快捷键设置
+async function saveHotkeys() {
+  if (!window.electron || !tempShortcut.value) return
+
+  try {
+    console.log('Saving shortcut:', tempShortcut.value)
+    window.electron.ipcRenderer.send('update-shortcut', {
+      key: 'quickAccess',
+      shortcut: tempShortcut.value
+    })
+
+    window.electron.ipcRenderer.once('shortcut-updated', ({ success, error }) => {
+      console.log('Shortcut update response:', { success, error })
+      if (success) {
+        // 更新显示的快捷键
+        shortcuts.value.quickAccess = tempShortcut.value
+        console.log('Updated shortcuts:', shortcuts.value)
+        // 关闭对话框
+        showHotkeysDialog.value = false
+        // 显示成功消息
+        ElMessage.success('快捷键设置已保存')
+        // 重新加载快捷键设置以确保同步
+        loadShortcuts()
+      } else {
+        console.error('Failed to update shortcut:', error)
+        ElMessage.error(`快捷键设置失败: ${error || '未知错误'}`)
+      }
+    })
+  } catch (error) {
+    console.error('Save hotkeys failed:', error)
+    ElMessage.error('保存快捷键失败')
+  }
+}
+
+// 在组件挂载时加载快捷键设置
+onMounted(() => {
+  loadShortcuts()
+  // 添加事件监听，当快捷键更新时重新加载
+  if (window.electron) {
+    window.electron.ipcRenderer.on('shortcuts-loaded', (loadedShortcuts) => {
+      if (loadedShortcuts) {
+        shortcuts.value = loadedShortcuts
+      }
+    })
+  }
 })
 
 // 保存设置
 async function saveSettings() {
   try {
-    clipboardStore.updateSettings(settings)
+    // 只传递需要的设置属性
+    const plainSettings = {
+      syncEnabled: settings.syncEnabled,
+      encryptEnabled: settings.encryptEnabled,
+      maxHistoryItems: settings.maxHistoryItems,
+      syncInterval: settings.syncInterval,
+      retentionPeriod: settings.retentionPeriod,
+      maxImageSize: settings.maxImageSize
+    }
+    clipboardStore.updateSettings(plainSettings)
     ElMessage.success('设置已保存')
   } catch (error) {
     console.error('Save settings failed:', error)
@@ -204,31 +323,6 @@ function resetSettings() {
     retentionPeriod: 30
   })
   ElMessage.success('已重置为默认设置')
-}
-
-// 记录快捷键
-function recordHotkey(event, type) {
-  event.preventDefault()
-  const { ctrlKey, shiftKey, altKey, key } = event
-  if (key === 'Tab') return
-
-  const keys = []
-  if (ctrlKey) keys.push('Ctrl')
-  if (shiftKey) keys.push('Shift')
-  if (altKey) keys.push('Alt')
-  if (key.length === 1) keys.push(key.toUpperCase())
-  else if (!['Control', 'Shift', 'Alt'].includes(key)) keys.push(key)
-
-  if (keys.length > 1) {
-    hotkeys[type] = keys.join('+')
-  }
-}
-
-// 保存快捷键设置
-function saveHotkeys() {
-  // TODO: 实现快捷键保存逻辑
-  showHotkeysDialog.value = false
-  ElMessage.success('快捷键设置已保存')
 }
 
 // 检查更新
@@ -302,5 +396,11 @@ async function checkUpdate() {
   :deep(.el-form-item__content) {
     margin-left: 0 !important;
   }
+}
+
+.shortcut-setting {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 </style> 

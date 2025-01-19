@@ -262,12 +262,22 @@ export const useClipboardStore = defineStore('clipboard', () => {
   // 更新设置
   function updateSettings(newSettings) {
     console.log('[Clipboard Store] 更新设置:', newSettings)
+    // 更新本地状态
     settings.value = { ...settings.value, ...newSettings }
     
     // 保存到本地存储
     const ipcRenderer = getIpcRenderer()
     if (ipcRenderer) {
-      ipcRenderer.send('save-settings', settings.value)
+      // 只发送必要的设置属性
+      const settingsToSave = {
+        syncEnabled: settings.value.syncEnabled,
+        encryptEnabled: settings.value.encryptEnabled,
+        maxHistoryItems: settings.value.maxHistoryItems,
+        syncInterval: settings.value.syncInterval,
+        retentionPeriod: settings.value.retentionPeriod,
+        maxImageSize: settings.value.maxImageSize
+      }
+      ipcRenderer.send('save-settings', settingsToSave)
       console.log('[Clipboard Store] 设置已保存到本地存储')
     }
   }

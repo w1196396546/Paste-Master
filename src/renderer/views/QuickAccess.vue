@@ -56,6 +56,7 @@ import { useClipboardStore } from '../../store/clipboard'
 import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
 import 'dayjs/locale/zh-cn'
+import { Search, Document, Link, Terminal, Picture, Monitor, Clock } from '@element-plus/icons-vue'
 
 dayjs.extend(relativeTime)
 dayjs.locale('zh-cn')
@@ -270,5 +271,37 @@ async function copyAndClose(item) {
 
 .list::-webkit-scrollbar-thumb:hover {
   background: rgba(0, 0, 0, 0.2);
+}
+
+.item-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  margin-top: 8px;
+}
+
+.item-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.item-category, .item-source, .item-time {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.item-source {
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.el-icon {
+  font-size: 14px;
 }
 </style> 

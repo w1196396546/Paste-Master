@@ -15,7 +15,10 @@ const store = new Store({
       retentionPeriod: 30,
       maxImageSize: 500
     },
-    clipboardItems: []
+    clipboardItems: [],
+    shortcuts: {
+      quickAccess: process.platform === 'darwin' ? 'Command+Shift+V' : 'Control+Shift+V'
+    }
   }
 })
 
@@ -62,7 +65,7 @@ async function createWindow() {
   })
 
   // 打开开发者工具
-  // mainWindow.webContents.openDevTools()
+  mainWindow.webContents.openDevTools()
 
   console.log('[Main] 主窗口已创建，preload路径:', isDevelopment
     ? path.join(process.cwd(), 'src/preload.js')
@@ -215,17 +218,10 @@ function isCodeContent(text) {
 
 // 监听剪贴板变化
 function watchClipboard() {
-  if (clipboardWatcher) {
-    console.log('[Main] 清除现有的剪贴板监听器')
-    clipboardWatcher = null
-  }
-
-  console.log('[Main] 开始监听剪贴板变化')
   let lastText = clipboard.readText()
   let lastImage = clipboard.readImage()
 
-  // 使用事件监听
-  const handleClipboardChange = () => {
+  clipboardWatcher = setInterval(async () => {
     try {
       const newText = clipboard.readText()
       const newImage = clipboard.readImage()
@@ -236,11 +232,32 @@ function watchClipboard() {
 
       if (!textChanged && !imageChanged) return
 
+      // 获取活跃窗口信息
+      const activeWin = BrowserWindow.getFocusedWindow()
+      let sourceApp = '未知来源'
+      
+      // 如果没有找到活跃窗口，尝试获取所有窗口
+      if (!activeWin) {
+        const windows = BrowserWindow.getAllWindows()
+        for (const win of windows) {
+          if (!win.isMinimized()) {
+            const title = win.getTitle()
+            if (title && title !== 'Plate') {
+              sourceApp = title
+              break
+            }
+          }
+        }
+      } else {
+        sourceApp = activeWin.getTitle()
+      }
+
       console.log('[Main] 检测到剪贴板变化:', {
         hasText: !!newText,
         hasImage: !newImage.isEmpty(),
         textChanged,
-        imageChanged
+        imageChanged,
+        sourceApp
       })
 
       // 处理文本变化
@@ -257,17 +274,19 @@ function watchClipboard() {
           id: Date.now(),
           category: category,
           content: newText,
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
+          sourceApp: sourceApp
         }
 
         // 发送到渲染进程
         if (mainWindow && !mainWindow.isDestroyed()) {
           console.log('[Main] 发送变化到渲染进程:', {
             id: clipboardItem.id,
-            category: clipboardItem.category
+            category: clipboardItem.category,
+            sourceApp: clipboardItem.sourceApp
           })
           mainWindow.webContents.send('clipboard-change', clipboardItem)
-          
+
           // 更新本地存储
           const items = store.get('clipboardItems', [])
           items.unshift(clipboardItem)
@@ -283,7 +302,8 @@ function watchClipboard() {
           id: Date.now(),
           category: 'image',
           content: newImage.toDataURL(),
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
+          sourceApp: sourceApp
         }
 
         if (mainWindow && !mainWindow.isDestroyed()) {
@@ -299,29 +319,7 @@ function watchClipboard() {
     } catch (error) {
       console.error('[Main] 处理剪贴板变化时出错:', error)
     }
-  }
-
-  // 监听系统剪贴板变化事件
-  if (process.platform === 'darwin') {
-    // macOS
-    app.on('browser-window-blur', handleClipboardChange)
-    app.on('browser-window-focus', handleClipboardChange)
-  } else {
-    // Windows 和 Linux
-    const pollInterval = 500 // 降低轮询间隔到 500ms
-    clipboardWatcher = setInterval(handleClipboardChange, pollInterval)
-  }
-
-  // 确保在应用退出时清理监听器
-  app.on('before-quit', () => {
-    if (process.platform === 'darwin') {
-      app.removeListener('browser-window-blur', handleClipboardChange)
-      app.removeListener('browser-window-focus', handleClipboardChange)
-    } else if (clipboardWatcher) {
-      clearInterval(clipboardWatcher)
-      clipboardWatcher = null
-    }
-  })
+  }, 1000) // 每秒检查一次
 }
 
 // 创建快速访问窗口
@@ -393,6 +391,41 @@ function createQuickAccessWindow() {
   })
 }
 
+// 获取默认快捷键
+function getDefaultShortcut() {
+  // 根据不同操作系统返回默认快捷键
+  return process.platform === 'darwin'
+    ? 'Command+Shift+V'  // macOS
+    : 'Control+Shift+V'  // Windows/Linux
+}
+
+// 转换快捷键格式
+function convertShortcutToElectron(shortcut) {
+  if (!shortcut) return ''
+  
+  // 将快捷键字符串分割成数组
+  const parts = shortcut.split('+').map(part => part.trim())
+  
+  // 转换修饰键
+  const modifiers = []
+  const mainKey = parts[parts.length - 1]
+  
+  // 处理修饰键
+  parts.slice(0, -1).forEach(part => {
+    const lower = part.toLowerCase()
+    if (lower === 'control' || lower === 'ctrl') modifiers.push('CommandOrControl')
+    else if (lower === 'command' || lower === 'cmd') modifiers.push('CommandOrControl')
+    else if (lower === 'alt') modifiers.push('Alt')
+    else if (lower === 'shift') modifiers.push('Shift')
+  })
+  
+  // 确保有主键
+  if (!mainKey) return ''
+  
+  // 组合成 Electron 格式的快捷键
+  return [...modifiers, mainKey].join('+')
+}
+
 // 注册全局快捷键
 function registerGlobalShortcuts() {
   const { globalShortcut } = require('electron')
@@ -400,22 +433,60 @@ function registerGlobalShortcuts() {
   // 先注销所有快捷键
   globalShortcut.unregisterAll()
   
-  // 注册快速访问快捷键 (Ctrl/Cmd + Shift + V)
-  const ret = globalShortcut.register('CommandOrControl+Shift+V', () => {
-    console.log('[Shortcut] 触发快速访问快捷键')
-    if (quickAccessWindow && quickAccessWindow.isVisible()) {
-      console.log('[Shortcut] 隐藏快速访问窗口')
-      quickAccessWindow.hide()
-    } else {
-      console.log('[Shortcut] 创建/显示快速访问窗口')
-      createQuickAccessWindow()
+  try {
+    // 从存储中获取快捷键配置，如果没有则使用默认值
+    const quickAccessShortcut = store.get('shortcuts.quickAccess')
+    
+    // 如果没有存储的快捷键，设置并存储默认值
+    if (!quickAccessShortcut) {
+      const defaultShortcut = getDefaultShortcut()
+      store.set('shortcuts.quickAccess', defaultShortcut)
+      console.log('[Shortcut] 设置默认快捷键:', defaultShortcut)
     }
-  })
+    
+    // 获取最终使用的快捷键
+    const finalShortcut = quickAccessShortcut || getDefaultShortcut()
+    console.log('[Shortcut] 正在注册快捷键:', finalShortcut)
+    
+    // 转换快捷键格式
+    const electronShortcut = convertShortcutToElectron(finalShortcut)
+    console.log('[Shortcut] 转换后的快捷键格式:', electronShortcut)
+    
+    const ret = globalShortcut.register(electronShortcut, () => {
+      console.log('[Shortcut] 触发快速访问快捷键')
+      if (quickAccessWindow && quickAccessWindow.isVisible()) {
+        console.log('[Shortcut] 隐藏快速访问窗口')
+        quickAccessWindow.hide()
+      } else {
+        console.log('[Shortcut] 创建/显示快速访问窗口')
+        createQuickAccessWindow()
+      }
+    })
 
-  if (!ret) {
-    console.error('[Shortcut] 快捷键注册失败')
-  } else {
-    console.log('[Shortcut] 快捷键注册成功')
+    if (!ret) {
+      console.error('[Shortcut] 快捷键注册失败')
+      // 如果注册失败，重置为默认快捷键
+      const defaultShortcut = getDefaultShortcut()
+      store.set('shortcuts.quickAccess', defaultShortcut)
+      console.log('[Shortcut] 重置为默认快捷键:', defaultShortcut)
+      // 尝试重新注册默认快捷键
+      const defaultElectronShortcut = convertShortcutToElectron(defaultShortcut)
+      globalShortcut.register(defaultElectronShortcut, () => {
+        if (quickAccessWindow && quickAccessWindow.isVisible()) {
+          quickAccessWindow.hide()
+        } else {
+          createQuickAccessWindow()
+        }
+      })
+    } else {
+      console.log('[Shortcut] 快捷键注册成功')
+    }
+  } catch (error) {
+    console.error('[Shortcut] 快捷键注册错误:', error)
+    // 发生错误时，重置为默认快捷键
+    const defaultShortcut = getDefaultShortcut()
+    store.set('shortcuts.quickAccess', defaultShortcut)
+    console.log('[Shortcut] 错误后重置为默认快捷键:', defaultShortcut)
   }
 }
 
@@ -574,5 +645,37 @@ ipcMain.on('window-control', (event, command) => {
     case 'close':
       mainWindow.hide()
       break
+  }
+})
+
+// 添加 IPC 处理程序
+ipcMain.on('update-shortcut', (event, { key, shortcut }) => {
+  console.log('[Main] 更新快捷键:', key, shortcut)
+  
+  try {
+    // 保存新的快捷键配置
+    store.set(`shortcuts.${key}`, shortcut)
+    console.log('[Main] 快捷键已保存到存储:', shortcut)
+    
+    // 重新注册快捷键
+    registerGlobalShortcuts()
+    
+    event.reply('shortcut-updated', { success: true })
+  } catch (error) {
+    console.error('[Main] 更新快捷键失败:', error)
+    event.reply('shortcut-updated', { success: false, error: error.message })
+  }
+})
+
+ipcMain.on('get-shortcuts', (event) => {
+  try {
+    const shortcuts = {
+      quickAccess: store.get('shortcuts.quickAccess', getDefaultShortcut())
+    }
+    console.log('[Main] 获取快捷键配置:', shortcuts)
+    event.reply('shortcuts-loaded', shortcuts)
+  } catch (error) {
+    console.error('[Main] 获取快捷键配置失败:', error)
+    event.reply('shortcuts-loaded', { quickAccess: getDefaultShortcut() })
   }
 }) 
