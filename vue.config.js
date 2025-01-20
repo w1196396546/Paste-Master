@@ -28,8 +28,25 @@ module.exports = defineConfig({
         directories: {
           output: 'dist_electron'
         },
+        files: [
+          "**/*",
+          "!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}",
+          "!**/node_modules/*/{test,__tests__,tests,powered-test,example,examples}",
+          "!**/node_modules/*.d.ts",
+          "!**/node_modules/.bin",
+          "!**/*.{iml,o,hprof,orig,pyc,pyo,rbc,swp,csproj,sln,xproj}",
+          "!.editorconfig",
+          "!**/._*",
+          "!**/{.DS_Store,.git,.hg,.svn,CVS,RCS,SCCS,.gitignore,.gitattributes}",
+          "!**/{__pycache__,thumbs.db,.flowconfig,.idea,.vs,.nyc_output}",
+          "!**/{appveyor.yml,.travis.yml,circle.yml}",
+          "!**/{npm-debug.log,yarn.lock,.yarn-integrity,.yarn-metadata.json}",
+     
+          "electrondist",
+          "electrondistfile"
+        ],
         win: {
-          icon: 'public/icons/icon.svg',
+          icon: 'build/icon.ico',
           target: [
             {
               target: 'nsis',
@@ -37,17 +54,13 @@ module.exports = defineConfig({
             }
           ]
         },
-        mac: {
-          icon: 'public/icons/icon.svg'
-        },
-        linux: {
-          icon: 'public/icons/icon.svg'
-        },
-        files: [
-          "**/*",
-          "src/preload.js",
-          "public/icons/*"
-        ]
+        nsis: {
+          oneClick: false,
+          allowToChangeInstallationDirectory: true,
+          createDesktopShortcut: true,
+          createStartMenuShortcut: true,
+          shortcutName: "Plate"
+        }
       }
     }
   }

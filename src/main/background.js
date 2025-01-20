@@ -31,6 +31,7 @@ let quickAccessWindow = null
 
 // 创建主窗口
 async function createWindow() {
+  console.log('[Main]isDevelopment1',isDevelopment)
   const iconPath = isDevelopment
     ? path.join(process.cwd(), 'public/icons/icon.png')
     : path.join(__dirname, '../public/icons/icon.png')
@@ -46,7 +47,7 @@ async function createWindow() {
       contextIsolation: true,
       preload: isDevelopment
         ? path.join(process.cwd(), 'src/preload.js')
-        : path.join(__dirname, '../preload.js'),
+        : path.join(__dirname, 'preload.js'),
       webSecurity: true,
       sandbox: false,
       devTools: true
@@ -69,7 +70,7 @@ async function createWindow() {
 
   console.log('[Main] 主窗口已创建，preload路径:', isDevelopment
     ? path.join(process.cwd(), 'src/preload.js')
-    : path.join(__dirname, '../preload.js'))
+    : path.join(__dirname, 'preload.js'))
   console.log('[Main] 主窗口已创建，准备加载URL')
 
   // 监听加载错误
@@ -350,7 +351,7 @@ function createQuickAccessWindow() {
       contextIsolation: true,
       preload: isDevelopment
         ? path.join(process.cwd(), 'src/preload.js')
-        : path.join(__dirname, '../preload.js'),
+        : path.join(__dirname, 'preload.js'),
       webSecurity: true,
       sandbox: false
     }
