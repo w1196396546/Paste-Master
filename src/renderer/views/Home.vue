@@ -162,6 +162,7 @@ async function copyToClipboard(item) {
 // 删除项目
 function removeItem(id) {
   clipboardStore.removeClipboardItem(id)
+  
   ElMessage.success('已删除')
 }
 

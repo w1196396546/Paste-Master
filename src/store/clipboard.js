@@ -82,6 +82,7 @@ export const useClipboardStore = defineStore('clipboard', () => {
         addClipboardItem(newItem)
       })
 
+
       // 在组件卸载时取消订阅
       onUnmounted(() => {
         console.log('[Clipboard Store] 取消剪贴板变化监听')
@@ -108,6 +109,13 @@ export const useClipboardStore = defineStore('clipboard', () => {
     }
 
     try {
+      // 检查是否已存在相同ID的项目
+      const existingIndex = clipboardItems.value.findIndex(existing => existing.id === item.id)
+      if (existingIndex !== -1) {
+        console.log('[Clipboard Store] 项目已存在，跳过添加')
+        return
+      }
+
       let processedItem = {
         id: item.id,
         category: item.category,

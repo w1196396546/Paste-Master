@@ -51,7 +51,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useClipboardStore } from '../../store/clipboard'
 import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
@@ -64,15 +64,51 @@ dayjs.locale('zh-cn')
 const clipboardStore = useClipboardStore()
 const searchKeyword = ref('')
 const currentCategory = ref('all')
-const categories = ['all', 'text', 'image', 'code', 'link']
+const categories = ['all', 'text', 'link', 'code', 'image']
+
+// 在组件挂载时初始化store和监听器
+onMounted(async () => {
+  console.log('[QuickAccess] 组件挂载，开始初始化')
+  
+  // 获取 ipcRenderer
+  if (!window.electron?.ipcRenderer) {
+    console.error('[QuickAccess] ipcRenderer 未找到')
+    return
+  }
+
+  // 获取最新的剪贴板历史
+  window.electron.ipcRenderer.send('get-clipboard-history')
+  window.electron.ipcRenderer.once('clipboard-history', (items) => {
+    console.log('[QuickAccess] 收到历史记录，数量:', items ? items.length : 0)
+    clipboardStore.clipboardItems.value = items || []
+  })
+
+  // 监听剪贴板变化
+  const unsubscribe = window.electron.ipcRenderer.on('clipboard-change', (newItem) => {
+    console.log('[QuickAccess] 收到剪贴板变化:', newItem)
+    // 检查是否已存在相同ID的项目
+    const existingIndex = clipboardStore.clipboardItems.value.findIndex(item => item.id === newItem.id)
+    if (existingIndex === -1) {
+      clipboardStore.clipboardItems.value.unshift(newItem)
+    }
+  })
+  // 在组件卸载时取消监听
+  onUnmounted(() => {
+    console.log('[QuickAccess] 组件卸载，取消监听')
+    unsubscribe?.()
+  })
+})
 
 const filteredItems = computed(() => {
+  console.log('[QuickAccess] 计算过滤后的项目',clipboardStore.clipboardItems)
   let items = clipboardStore.clipboardItems
-
+  
+  // 根据分类过滤
   if (currentCategory.value !== 'all') {
     items = items.filter(item => item.category === currentCategory.value)
   }
-
+  
+  // 根据搜索关键词过滤
   if (searchKeyword.value) {
     const keyword = searchKeyword.value.toLowerCase()
     items = items.filter(item => {
@@ -80,17 +116,17 @@ const filteredItems = computed(() => {
       return content.toLowerCase().includes(keyword)
     })
   }
-
-  return items.slice(0, 20)
+  
+  return items
 })
 
 function getCategoryLabel(category) {
   const labels = {
     all: '全部',
     text: '文本',
-    image: '图片',
+    link: '链接',
     code: '代码',
-    link: '链接'
+    image: '图片'
   }
   return labels[category] || category
 }

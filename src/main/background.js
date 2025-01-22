@@ -2,8 +2,76 @@ import { app, protocol, BrowserWindow, ipcMain, clipboard, Tray, Menu, nativeIma
 import { createProtocol } from 'vue-cli-plugin-electron-builder/lib'
 import path from 'path'
 import Store from 'electron-store'
+import fs from 'fs'
 
 const isDevelopment = process.env.NODE_ENV !== 'production'
+
+// 设置日志文件路径
+const logPath = isDevelopment 
+  ? path.join(process.cwd(), 'app.log')
+  : path.join(app.getPath('userData'), 'app.log')
+
+// 保存原始的console方法
+const originalConsole = {
+  log: console.log.bind(console),
+  error: console.error.bind(console),
+  warn: console.warn.bind(console)
+}
+
+// 创建自定义日志函数
+function writeLog(type, ...args) {
+  try {
+    const time = new Date().toISOString()
+    const message = `[${time}] [${type}] ${args.map(arg => {
+      if (arg instanceof Error) {
+        return arg.stack || arg.message
+      }
+      return typeof arg === 'object' ? JSON.stringify(arg, null, 2) : arg
+    }).join(' ')}\n`
+    
+    // 输出到控制台
+    originalConsole.log(message)
+    
+    // 写入文件
+    fs.appendFileSync(logPath, message)
+  } catch (err) {
+    originalConsole.error('写入日志失败:', err)
+  }
+}
+
+// 替换console方法
+console.log = (...args) => writeLog('INFO', ...args)
+console.error = (...args) => writeLog('ERROR', ...args)
+console.warn = (...args) => writeLog('WARN', ...args)
+
+// 在应用启动时清理旧日志
+try {
+  if (fs.existsSync(logPath)) {
+    const stats = fs.statSync(logPath)
+    // 如果日志文件大于10MB，则清空
+    if (stats.size > 10 * 1024 * 1024) {
+      fs.writeFileSync(logPath, '')
+    }
+  }
+} catch (err) {
+  originalConsole.error('清理日志文件失败:', err)
+}
+
+// 记录应用启动信息
+console.log('应用启动', {
+  version: app.getVersion(),
+  platform: process.platform,
+  arch: process.arch,
+  electron: process.versions.electron,
+  chrome: process.versions.chrome,
+  node: process.versions.node,
+  isDevelopment,
+  logPath,
+  userData: app.getPath('userData'),
+  appPath: app.getAppPath(),
+  execPath: app.getPath('exe')
+})
+
 const store = new Store({
   name: 'plate-data',
   defaults: {
@@ -66,7 +134,9 @@ async function createWindow() {
   })
 
   // 打开开发者工具
-  mainWindow.webContents.openDevTools()
+  if(isDevelopment){
+    mainWindow.webContents.openDevTools()
+  }
 
   console.log('[Main] 主窗口已创建，preload路径:', isDevelopment
     ? path.join(process.cwd(), 'src/preload.js')
@@ -279,20 +349,30 @@ function watchClipboard() {
           sourceApp: sourceApp
         }
 
-        // 发送到渲染进程
+        // 发送到主窗口
         if (mainWindow && !mainWindow.isDestroyed()) {
-          console.log('[Main] 发送变化到渲染进程:', {
+          console.log('[Main] 发送变化到主窗口:', {
             id: clipboardItem.id,
             category: clipboardItem.category,
             sourceApp: clipboardItem.sourceApp
           })
           mainWindow.webContents.send('clipboard-change', clipboardItem)
-
-          // 更新本地存储
-          const items = store.get('clipboardItems', [])
-          items.unshift(clipboardItem)
-          store.set('clipboardItems', items)
         }
+
+        // 同时发送到快捷访问窗口
+        if (quickAccessWindow && !quickAccessWindow.isDestroyed()) {
+          console.log('[Main] 发送变化到快捷访问窗口:', {
+            id: clipboardItem.id,
+            category: clipboardItem.category,
+            sourceApp: clipboardItem.sourceApp
+          })
+          quickAccessWindow.webContents.send('clipboard-change', clipboardItem)
+        }
+
+        // 更新本地存储
+        const items = store.get('clipboardItems', [])
+        items.unshift(clipboardItem)
+        store.set('clipboardItems', items)
         
         lastText = newText
       }
@@ -307,14 +387,23 @@ function watchClipboard() {
           sourceApp: sourceApp
         }
 
+        // 发送到主窗口
         if (mainWindow && !mainWindow.isDestroyed()) {
+          console.log('[Main] 发送图片变化到主窗口')
           mainWindow.webContents.send('clipboard-change', clipboardItem)
-          
-          const items = store.get('clipboardItems', [])
-          items.unshift(clipboardItem)
-          store.set('clipboardItems', items)
         }
 
+        // 同时发送到快捷访问窗口
+        if (quickAccessWindow && !quickAccessWindow.isDestroyed()) {
+          console.log('[Main] 发送图片变化到快捷访问窗口')
+          quickAccessWindow.webContents.send('clipboard-change', clipboardItem)
+        }
+
+        // 更新本地存储
+        const items = store.get('clipboardItems', [])
+        items.unshift(clipboardItem)
+        store.set('clipboardItems', items)
+        
         lastImage = newImage
       }
     } catch (error) {
@@ -326,12 +415,16 @@ function watchClipboard() {
 // 创建快速访问窗口
 function createQuickAccessWindow() {
   if (quickAccessWindow) {
+    console.log('[QuickAccess] 窗口已存在，显示窗口')
     quickAccessWindow.show()
+    quickAccessWindow.focus()
     return
   }
 
   const display = require('electron').screen.getPrimaryDisplay()
   const { width, height } = display.workAreaSize
+
+  console.log('[QuickAccess] 开始创建快速访问窗口')
 
   quickAccessWindow = new BrowserWindow({
     width: 380,
@@ -365,31 +458,77 @@ function createQuickAccessWindow() {
     ? process.env.WEBPACK_DEV_SERVER_URL + 'quickAccess.html'
     : 'app://./quickAccess.html'
 
-  console.log('[QuickAccess] 加载页面:', quickAccessURL)
-  
-  quickAccessWindow.loadURL(quickAccessURL).catch(error => {
-    console.error('[QuickAccess] 加载页面失败:', error)
+  console.log('[QuickAccess] 准备加载页面:', quickAccessURL)
+
+  // 监听页面加载失败
+  quickAccessWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
+    console.error('[QuickAccess] 页面加载失败:', {
+      errorCode,
+      errorDescription,
+      url: quickAccessURL
+    })
   })
 
-  // 开发环境打开开发者工具
-  if (isDevelopment) {
-    // quickAccessWindow.webContents.openDevTools()
-  }
-
-  // 窗口失去焦点时自动隐藏
-  quickAccessWindow.on('blur', () => {
-    quickAccessWindow.hide()
+  // 监听页面加载完成
+  quickAccessWindow.webContents.on('did-finish-load', () => {
+    console.log('[QuickAccess] 页面加载完成')
   })
 
-  // 窗口关闭时清理引用
-  quickAccessWindow.on('closed', () => {
-    quickAccessWindow = null
+  // 监听DOM准备就绪
+  quickAccessWindow.webContents.on('dom-ready', () => {
+    console.log('[QuickAccess] DOM准备就绪')
   })
 
   // 准备好后显示窗口
   quickAccessWindow.once('ready-to-show', () => {
+    console.log('[QuickAccess] 窗口准备就绪，显示窗口')
     quickAccessWindow.show()
+    quickAccessWindow.focus()
   })
+
+  // 监听窗口显示事件
+  quickAccessWindow.on('show', () => {
+    console.log('[QuickAccess] 窗口显示')
+    quickAccessWindow.focus()
+  })
+
+  // 窗口失去焦点时的处理
+  let hideTimeout = null
+  quickAccessWindow.on('blur', () => {
+    console.log('[QuickAccess] 窗口失去焦点')
+    // 清除之前的定时器
+    if (hideTimeout) {
+      clearTimeout(hideTimeout)
+    }
+    // 设置新的定时器
+    hideTimeout = setTimeout(() => {
+      if (quickAccessWindow && !quickAccessWindow.isDestroyed()) {
+        quickAccessWindow.hide()
+      }
+    }, 200)
+  })
+
+  // 窗口关闭时清理引用
+  quickAccessWindow.on('closed', () => {
+    console.log('[QuickAccess] 窗口已关闭')
+    if (hideTimeout) {
+      clearTimeout(hideTimeout)
+    }
+    quickAccessWindow = null
+  })
+
+  // 加载页面
+  console.log('[QuickAccess] 开始加载页面')
+  quickAccessWindow.loadURL(quickAccessURL).then(() => {
+    console.log('[QuickAccess] 页面加载成功')
+  }).catch(error => {
+    console.error('[QuickAccess] 页面加载失败:', error)
+  })
+
+  // 开发环境打开开发者工具
+  if (isDevelopment) {
+    quickAccessWindow.webContents.openDevTools({ mode: 'detach' })
+  }
 }
 
 // 获取默认快捷键
@@ -495,6 +634,12 @@ function registerGlobalShortcuts() {
 app.on('ready', async () => {
   try {
     console.log('[Main] 应用准备就绪，开始创建窗口')
+    
+    // 注册协议
+    if (!process.env.WEBPACK_DEV_SERVER_URL) {
+      console.log('[Main] 注册 app:// 协议')
+      createProtocol('app')
+    }
     
     await createWindow()
     console.log('[Main] 主窗口创建完成')
@@ -619,6 +764,7 @@ ipcMain.on('save-clipboard-history', (event, items) => {
   console.log('[Main] 收到保存剪贴板历史请求:', items.length, '条记录')
   store.set('clipboardItems', items)
   event.reply('clipboard-history-saved', true)
+  event.reply('clipboard-history', items)
   console.log('[Main] 剪贴板历史已保存')
 })
 

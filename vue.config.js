@@ -10,9 +10,9 @@ module.exports = defineConfig({
       filename: 'index.html'
     },
     quickAccess: {
-      entry: 'src/quick-access.js',
-      template: 'public/quick-access.html',
-      filename: 'quick-access.html'
+      entry: 'src/quickAccess.js',
+      template: 'public/quickAccess.html',
+      filename: 'quickAccess.html'
     }
   },
   pluginOptions: {
